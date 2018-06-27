@@ -336,7 +336,11 @@ void app_main(void)
     char *buf = malloc(bufsize),
         *string = malloc(stringsize);
 
-    update_quote(client, buf, bufsize, string, stringsize);
+    while (1) {
+        ESP_LOGI(TAG, "fetching updated quote...");
+        update_quote(client, buf, bufsize, string, stringsize);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
 
     /* xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL); */
 }

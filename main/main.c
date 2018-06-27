@@ -332,13 +332,17 @@ void app_main(void)
     esp_http_client_handle_t client = get_quote_client();
 
     // initialise buffers
-    const int bufsize = 512, stringsize = 128;
+    const int bufsize = 512, stringsize = 64;
     char *buf = malloc(bufsize),
         *string = malloc(stringsize);
 
     while (1) {
         ESP_LOGI(TAG, "fetching updated quote...");
         update_quote(client, buf, bufsize, string, stringsize);
+        /* update text */
+        xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
+                    string, 6, NULL);
+        /* delay */
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
 

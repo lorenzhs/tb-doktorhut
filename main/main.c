@@ -12,13 +12,7 @@
 #include "esp_spi_flash.h"
 #include "nvs_flash.h"
 
-//#include "esp_http_client.h"
-
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
-#include "lwip/netdb.h"
-#include "lwip/dns.h"
+#include "esp_http_client.h"
 
 /*=================================================*/
 // display stuff
@@ -62,6 +56,142 @@ static const char *REQUEST = "GET " WEB_URL " HTTP/1.0\r\n"
 /*============ WiFi helper functions ==============*/
 /*=================================================*/
 
+esp_err_t _http_event_handler(esp_http_client_event_t *evt)
+{
+    switch(evt->event_id) {
+        case HTTP_EVENT_ERROR:
+            ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
+            break;
+        case HTTP_EVENT_ON_CONNECTED:
+            ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
+            break;
+        case HTTP_EVENT_HEADER_SENT:
+            ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
+            break;
+        case HTTP_EVENT_ON_HEADER:
+            ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+            break;
+        case HTTP_EVENT_ON_DATA:
+            ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+            if (!esp_http_client_is_chunked_response(evt->client)) {
+                // Write out data
+                // printf("%.*s", evt->data_len, (char*)evt->data);
+            }
+
+            break;
+        case HTTP_EVENT_ON_FINISH:
+            ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
+            break;
+        case HTTP_EVENT_DISCONNECTED:
+            ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
+            break;
+    }
+    return ESP_OK;
+}
+
+static int wifi_login()
+{
+    int status = 1;
+
+    esp_http_client_config_t config = {
+        .url = "http://cp.ka-wlan.de/login",
+        .event_handler = _http_event_handler,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+
+    // GET login form
+
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "HTTP GET error requesting login page: %s",
+                 esp_err_to_name(err));
+        goto _exit;
+    }
+    esp_http_client_fetch_headers(client);
+    ESP_LOGI(TAG, "HTTP GET Status = %d, content_length = %d",
+             esp_http_client_get_status_code(client),
+             esp_http_client_get_content_length(client));
+
+    // read data
+    const int bufsize = 5000;
+    char* data = malloc(bufsize);
+    int read_index = 0, total_len = 0;
+    while (1) {
+        int read_len = esp_http_client_read(client, data + read_index, bufsize - read_index);
+        ESP_LOGI(TAG, "Read %d bytes", read_len);
+        if (read_len <= 0) {
+            break;
+        }
+        read_index += read_len;
+        total_len += read_len;
+        data[read_index] = 0;
+    }
+    if (total_len <= 0) {
+        ESP_LOGE(TAG, "Invalid length of the response");
+        free(data);
+        goto _exit;
+    }
+
+    ESP_LOGD(TAG, "Data=%s", data);
+
+    // extract login information
+    const char mac_needle[] = "<input type=\"hidden\" name=\"username\" type=\"text\" value=\"";
+    const char pw_needle[] = "<input type=\"hidden\" name=\"password\" type=\"password\" value=\"";
+
+    char* mac_begin = strstr(data, mac_needle) + strlen(mac_needle);
+    char* mac_end = mac_begin + 17;
+
+    char* pw_begin = strstr(data, pw_needle) + strlen(pw_needle);
+    char* pw_end = strstr(pw_begin, "\"");
+
+    ESP_LOGI(TAG, "Found MAC address at %d - %d, password at %d - %d",
+             mac_begin - data, mac_end - data, pw_begin - data, pw_end - data);
+
+    *mac_end = 0;
+    *pw_end = 0;
+
+    char mac[18];
+    char pw[32];
+
+    strncpy(mac, mac_begin, 18);
+    strncpy(pw, pw_begin, 32);
+
+    ESP_LOGI(TAG, "MAC: %s, Pass: %s", mac, pw);
+
+    free(data);
+
+    // assemble POST request
+    int post_data_len = 55 /* default params */ + 17 /* mac */ + strlen(pw);
+    char *post_data = malloc(post_data_len);
+    sprintf(post_data,
+            "dst=http://example.com&popup=false&username=%s&password=%s",
+            mac, pw);
+    ESP_LOGI(TAG, "post data: %s", post_data);
+
+    // POST the login request
+    esp_http_client_set_method(client, HTTP_METHOD_POST);
+    esp_http_client_set_post_field(client, post_data, strlen(post_data));
+    err = esp_http_client_perform(client);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "HTTP POST Status = %d, content_length = %d",
+                esp_http_client_get_status_code(client),
+                esp_http_client_get_content_length(client));
+    } else {
+        ESP_LOGE(TAG, "HTTP POST request failed: %s", esp_err_to_name(err));
+    }
+
+    status = 0;
+
+_exit:
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+
+    return status;
+}
+
+
+/******************************************************************************/
+
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
     switch(event->event_id) {
@@ -104,100 +234,6 @@ static void initialise_wifi(void)
 }
 
 /*=================================================*/
-
-
-static void http_get_task(char* server, char* port, char* request,
-                          void *pvParameters)
-{
-    const struct addrinfo hints = {
-        .ai_family = AF_INET,
-        .ai_socktype = SOCK_STREAM,
-    };
-    struct addrinfo *res;
-    struct in_addr *addr;
-    int s, r;
-    char recv_buf[64];
-
-    while(1) {
-        /* Wait for the callback to set the CONNECTED_BIT in the
-           event group.
-        */
-        xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,
-                            false, true, portMAX_DELAY);
-        ESP_LOGI(TAG, "Connected to AP");
-
-        int err = getaddrinfo(server, port, &hints, &res);
-
-        if(err != 0 || res == NULL) {
-            ESP_LOGE(TAG, "DNS lookup failed err=%d res=%p", err, res);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            continue;
-        }
-
-        /* Code to print the resolved IP.
-
-           Note: inet_ntoa is non-reentrant, look at ipaddr_ntoa_r for "real" code */
-        addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
-        ESP_LOGI(TAG, "DNS lookup succeeded. IP=%s", inet_ntoa(*addr));
-
-        s = socket(res->ai_family, res->ai_socktype, 0);
-        if(s < 0) {
-            ESP_LOGE(TAG, "... Failed to allocate socket.");
-            freeaddrinfo(res);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            continue;
-        }
-        ESP_LOGI(TAG, "... allocated socket");
-
-        if(connect(s, res->ai_addr, res->ai_addrlen) != 0) {
-            ESP_LOGE(TAG, "... socket connect failed errno=%d", errno);
-            close(s);
-            freeaddrinfo(res);
-            vTaskDelay(4000 / portTICK_PERIOD_MS);
-            continue;
-        }
-
-        ESP_LOGI(TAG, "... connected");
-        freeaddrinfo(res);
-
-        if (write(s, request, strlen(request)) < 0) {
-            ESP_LOGE(TAG, "... socket send failed");
-            close(s);
-            vTaskDelay(4000 / portTICK_PERIOD_MS);
-            continue;
-        }
-        ESP_LOGI(TAG, "... socket send success");
-
-        struct timeval receiving_timeout;
-        receiving_timeout.tv_sec = 5;
-        receiving_timeout.tv_usec = 0;
-        if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &receiving_timeout,
-                sizeof(receiving_timeout)) < 0) {
-            ESP_LOGE(TAG, "... failed to set socket receiving timeout");
-            close(s);
-            vTaskDelay(4000 / portTICK_PERIOD_MS);
-            continue;
-        }
-        ESP_LOGI(TAG, "... set socket receiving timeout success");
-
-        /* Read HTTP response */
-        do {
-            bzero(recv_buf, sizeof(recv_buf));
-            r = read(s, recv_buf, sizeof(recv_buf)-1);
-            for(int i = 0; i < r; i++) {
-                putchar(recv_buf[i]);
-            }
-        } while(r > 0);
-
-        ESP_LOGI(TAG, "... done reading from socket. Last read return=%d errno=%d\r\n", r, errno);
-        close(s);
-        for(int countdown = 10; countdown >= 0; countdown--) {
-            ESP_LOGI(TAG, "%d... ", countdown);
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-        }
-        ESP_LOGI(TAG, "Starting again!");
-    }
-}
 
 
 void app_main(void)
@@ -253,6 +289,16 @@ void app_main(void)
         }*/
 
     initialise_wifi();
-    /*
-       xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL); */
+
+    /* Wait for the callback to set the CONNECTED_BIT in the
+       event group.
+    */
+    xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,
+                        false, true, portMAX_DELAY);
+    ESP_LOGI(TAG, "Connected to AP");
+
+    int status = wifi_login();
+    if (status != 0)
+        ESP_LOGE(TAG, "Couldn't log into KA-WLAN?");
+    /* xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL); */
 }

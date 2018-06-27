@@ -127,15 +127,17 @@ static int wifi_login()
 
     // extract login information
     const char done_needle[] = "Sie sind erfolgreich eingeloggt.";
-    const char mac_needle[] = "<input type=\"hidden\" name=\"username\" type=\"text\" value=\"";
-    const char pw_needle[] = "<input type=\"hidden\" name=\"password\" type=\"password\" value=\"";
 
-    if (strstr(data, done_needle) == NULL) {
+    if (strstr(data, done_needle) != NULL) {
         // we're already logged in
+        ESP_LOGI(TAG, "already logged in, aborting");
         free(data);
         status = 0;
         goto _exit;
     }
+
+    const char mac_needle[] = "<input type=\"hidden\" name=\"username\" type=\"text\" value=\"";
+    const char pw_needle[] = "<input type=\"hidden\" name=\"password\" type=\"password\" value=\"";
 
     char* mac_begin = strstr(data, mac_needle) + strlen(mac_needle);
     char* mac_end = mac_begin + 17;

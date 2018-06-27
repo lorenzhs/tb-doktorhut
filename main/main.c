@@ -132,7 +132,14 @@ static int wifi_login()
         goto _exit;
     }
 
-    ESP_LOGD(TAG, "Data=%s", data);
+    ESP_LOGI(TAG, "Data=%s", data);
+
+    if (total_len < 2000) {
+        ESP_LOGE(TAG, "Data length < 2000, already logged in?!");
+        free(data);
+        status = 0;
+        goto _exit;
+    }
 
     // extract login information
     const char mac_needle[] = "<input type=\"hidden\" name=\"username\" type=\"text\" value=\"";

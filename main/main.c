@@ -230,13 +230,13 @@ static void update_quote(esp_http_client_handle_t client,
     ESP_LOGI(TAG, "Response: %s", buf);
 
     memcpy(dest, buf, 7);
-    dest[8] = ' ';
+    dest[7] = ' ';
     memcpy(dest + 8, buf + 70, 4);
     memcpy(dest + 12, buf + 110, 3);
     dest[15] = ' ';
-    memcpy(dest + 15, buf + 140, 4);
-    memcpy(dest + 19, buf + 180, 3);
-    dest[22] = 0;
+    memcpy(dest + 16, buf + 140, 4);
+    memcpy(dest + 20, buf + 180, 3);
+    dest[23] = 0;
 
     ESP_LOGI(TAG, "Quote: %s", dest);
 }

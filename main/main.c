@@ -131,7 +131,7 @@ static int wifi_login()
         goto _exit;
     }
 
-    ESP_LOGI(TAG, "Data=%s", data);
+    ESP_LOGD(TAG, "Data=%s", data);
 
     // extract login information
     const char done_needle[] = "Sie sind erfolgreich eingeloggt.";

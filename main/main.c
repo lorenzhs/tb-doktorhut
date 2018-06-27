@@ -52,9 +52,8 @@ static const char *REQUEST = "GET " WEB_URL " HTTP/1.0\r\n"
     "\r\n";
 
 
-/*=================================================*/
-/*============ WiFi helper functions ==============*/
-/*=================================================*/
+/******************************************************************************/
+/*** WiFi Login (KA-WLAN)******************************************************/
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt)
 {
@@ -196,8 +195,48 @@ _exit:
     return status;
 }
 
+static esp_http_client_handle_t get_quote_client() {
+    esp_http_client_config_t config = {
+        .url = "http://webrates.truefx.com/rates/connect.html",
+        .event_handler = _http_event_handler,
+    };
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    return client;
+}
+
+static void update_quote(esp_http_client_handle_t client,
+                         char* buf, int bufsize, char* dest, int destsize) {
+    /* Step 1: fetch new quote */
+    esp_err_t err = esp_http_client_open(client, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "HTTP GET error requesting quote: %s",
+                 esp_err_to_name(err));
+        return;
+    }
+    esp_http_client_fetch_headers(client);
+
+    // read data
+    int read_index = 0, total_len = 0;
+    while (1) {
+        int read_len = esp_http_client_read(client, buf + read_index, bufsize - read_index);
+        ESP_LOGI(TAG, "Read %d bytes", read_len);
+        if (read_len <= 0) {
+            break;
+        }
+        read_index += read_len;
+        total_len += read_len;
+        buf[read_index] = 0;
+    }
+    if (total_len <= 0) {
+        ESP_LOGE(TAG, "Invalid length of the response");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Response: %s", buf);
+}
 
 /******************************************************************************/
+/*** WiFi Authentication ******************************************************/
 
 esp_err_t event_handler(void *ctx, system_event_t *event)
 {
@@ -240,8 +279,8 @@ static void initialise_wifi(void)
     ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
-/*=================================================*/
-
+/******************************************************************************/
+/*** Main Logic ***************************************************************/
 
 void app_main(void)
 {
@@ -307,5 +346,16 @@ void app_main(void)
     int status = wifi_login();
     if (status != 0)
         ESP_LOGE(TAG, "Couldn't log into KA-WLAN?");
+
+    // get http client for quote fetching
+    esp_http_client_handle_t client = get_quote_client();
+
+    // initialise buffers
+    const int bufsize = 512, stringsize = 128;
+    char *buf = malloc(bufsize),
+        *string = malloc(stringsize);
+
+    update_quote(client, buf, bufsize, string, stringsize);
+
     /* xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL); */
 }

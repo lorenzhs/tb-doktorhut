@@ -237,16 +237,17 @@ static void update_quote(esp_http_client_handle_t client,
     memcpy(dest + 35, buf + 140, 4);
     memcpy(dest + 39, buf + 180, 3);
     dest[42] = '\n';
+    dest[43] = '\n';
 
     // GBP/USD
-    memcpy(dest + 43, buf + 14, 7);
-    sprintf(dest + 50, "         \nBid: ");
-    memcpy(dest + 65, buf + 78, 4);
-    memcpy(dest + 69, buf + 118, 3);
-    sprintf(dest + 72, "\nAsk: ");
-    memcpy(dest + 78, buf + 148, 4);
-    memcpy(dest + 82, buf + 188, 3);
-    dest[85] = 0;
+    memcpy(dest + 44, buf + 14, 7);
+    sprintf(dest + 51, "         \nBid: ");
+    memcpy(dest + 66, buf + 78, 4);
+    memcpy(dest + 70, buf + 116, 3);
+    sprintf(dest + 73, "\nAsk: ");
+    memcpy(dest + 79, buf + 148, 4);
+    memcpy(dest + 83, buf + 186, 3);
+    dest[86] = 0;
 
     ESP_LOGI(TAG, "Quote: %s", dest);
 }

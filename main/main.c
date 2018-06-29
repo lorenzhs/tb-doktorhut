@@ -228,6 +228,9 @@ static void update_quote(esp_http_client_handle_t client,
 
     ESP_LOGD(TAG, "Response: %s", buf);
 
+    sprintf(dest, "TB Forex Rates\n");
+    dest += 15; // hack
+
     // EUR/USD
     memcpy(dest, buf, 7);
     sprintf(dest + 7, "         \nBid: ");
@@ -344,7 +347,7 @@ void app_main(void)
     esp_http_client_handle_t client = get_quote_client();
 
     // initialise buffers
-    const int bufsize = 512, stringsize = 90;
+    const int bufsize = 512, stringsize = 100;
     char *buf = malloc(bufsize),
         *string = malloc(stringsize);
 

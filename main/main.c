@@ -51,85 +51,114 @@ static const char *TAG = "tbhut";
 //#define delay_ms(ms) vTaskDelay((ms) / portTICK_RATE_MS)
 
 #include "driver/rmt.h"
+#include "sdkconfig.h"
 
-static const char *RMT_TX_TAG = "RMT Tx";
+#define RMT_TX_CHANNEL1 RMT_CHANNEL_0
 
-#define RMT_TX_CHANNEL RMT_CHANNEL_0
 #define RMT_TX_GPIO 18
+
+#define DIVIDER 8;    /*set the maximum clock divider to be able to output
+                 RMT pulses in range of about one hundred nanoseconds
+                 a divider of 8 will give us 80 MHz / 8 = 10 MHz -> 0.1 us*/
+
+#define striplen 64
+
+/*******************
+ *SK6812 Timings
+********************/
+#define T0H   3// T0H for SK6812 -> 0.3 us
+#define T0L   9 // T0L for SK6812 -> 0.9 us
+#define T1H   6 // T1H for SK6812 -> 0.6 us
+#define T1L   6 // T1L for SK6812 -> 0.6 us
+#define TRS   800 // TRES for SK6812 -> 80 us
+
 
 rmt_item32_t pixels[] = {
 
    // 8 Bit G
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
 
    // 8 Bit R
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
 
    // 8 Bit B
-   {{{6, 1, 6, 0}}},
-   {{{6, 1, 6, 0}}},
-   {{{6, 1, 6, 0}}},
-   {{{6, 1, 6, 0}}},
-   {{{6, 1, 6, 0}}},
-   {{{6, 1, 6, 0}}},
-   {{{6, 1, 6, 0}}},
-   {{{6, 1, 6, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
 
    // 8 Bit W
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
-   {{{3, 1, 9, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
+   {{{T1H, 1, T1L, 0}}},
 
-   {{{0, 0, 800, 0}}},
+   {{{1, 1, TRS, 0}}}, // <- When the 1 is set to 0 ticks, it stops working
 
    // RMT end marker
    {{{ 0, 0, 0, 0 }}}
+
 };
 
 
 /*
- * Initialize the RMT Tx channel
+ * @brief Initialize each RMT_Channel
+ * @param [in] number of Channels to be used. GPIO starting at pin 18
  */
-static void rmt_tx_int()
-{
-    rmt_config_t config;
-    config.rmt_mode = RMT_MODE_TX;
-    config.channel = RMT_TX_CHANNEL;
-    config.gpio_num = RMT_TX_GPIO;
-    config.mem_block_num = 1;
-    config.tx_config.loop_en = 0;
-    config.tx_config.carrier_en = 0;
-    config.tx_config.idle_output_en = 1;
-    config.tx_config.idle_level = (rmt_idle_level_t)0;
-    config.tx_config.carrier_duty_percent = 50;
-    config.tx_config.carrier_freq_hz = 10000;
-    config.tx_config.carrier_level = (rmt_carrier_level_t)0;
-    // set the maximum clock divider to be able to output
-    // RMT pulses in range of about one hundred nanoseconds
-    // a divider of 8 will give us 80 MHz / 8 = 10 MHz -> 0.1 us
-    config.clk_div = 8;
 
-    ESP_ERROR_CHECK(rmt_config(&config));
-    ESP_ERROR_CHECK(rmt_driver_install(config.channel, 0, 0));
+static bool initPixels(uint8_t numChan)
+{
+   rmt_config_t config[numChan];
+   for(uint8_t i=0; i<numChan; i++){
+
+       config[i].rmt_mode = RMT_MODE_TX;
+       config[i].channel = i; // Could be defined via the enumeration: rmt_channel_t
+       config[i].gpio_num = (18+i);
+       config[i].mem_block_num = 1;
+       config[i].tx_config.loop_en = 0;
+       config[i].tx_config.carrier_en = 0; // disable carrier
+       config[i].tx_config.idle_output_en = 1; // activate output while idle
+       config[i].tx_config.idle_level = (rmt_idle_level_t)0; // output level to 0 when idle
+       config[i].tx_config.carrier_duty_percent = 50; // must be set to prevent errors - not used
+       config[i].tx_config.carrier_freq_hz = 10000; // must be set to prevent errors - not used
+       config[i].tx_config.carrier_level = (rmt_carrier_level_t)0; // must be set to prevent errors - not used
+       config[i].clk_div = DIVIDER;
+
+      esp_err_t config_ok = rmt_config(&config[i]);
+      if (config_ok != ESP_OK) {
+         return 0;
+      }
+
+      esp_err_t install_ok = rmt_driver_install(config[i].channel, 0, 0);
+      if (install_ok != ESP_OK) {
+         return 0;
+      }
+
+   } // end for
+
+   return 1;
 }
 
 
@@ -479,15 +508,11 @@ void app_main(void)
     ESP_ERROR_CHECK( nvs_flash_init() );
 
     // Rainbow LEDs!
-
-    ESP_LOGI(RMT_TX_TAG, "Configuring transmitter");
-    rmt_tx_int();
-    int number_of_items = sizeof(pixels) / sizeof(pixels[0]);
+    initPixels(1);
 
     while (1) {
-        ESP_ERROR_CHECK(rmt_write_items(RMT_TX_CHANNEL, pixels, number_of_items, 1));
-        ESP_LOGI(RMT_TX_TAG, "Transmission complete");
-        //vTaskDelay(6000 / portTICK_PERIOD_MS);
+       rmt_write_items(RMT_TX_CHANNEL1, pixels, (striplen*32+2), 1);
+       //vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 
     //ws2812_init(WS2812_PIN);

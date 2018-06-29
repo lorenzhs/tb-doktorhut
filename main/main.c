@@ -226,8 +226,9 @@ static void update_quote(esp_http_client_handle_t client,
         return;
     }
 
-    ESP_LOGI(TAG, "Response: %s", buf);
+    ESP_LOGD(TAG, "Response: %s", buf);
 
+    // EUR/USD
     memcpy(dest, buf, 7);
     sprintf(dest + 7, "         \nBid: ");
     memcpy(dest + 22, buf + 70, 4);
@@ -235,7 +236,17 @@ static void update_quote(esp_http_client_handle_t client,
     sprintf(dest + 29, "\nAsk: ");
     memcpy(dest + 35, buf + 140, 4);
     memcpy(dest + 39, buf + 180, 3);
-    dest[42] = 0;
+    dest[42] = '\n';
+
+    // GBP/USD
+    memcpy(dest + 43, buf + 14, 7);
+    sprintf(dest + 50, "         \nBid: ");
+    memcpy(dest + 65, buf + 78, 4);
+    memcpy(dest + 69, buf + 118, 3);
+    sprintf(dest + 72, "\nAsk: ");
+    memcpy(dest + 78, buf + 148, 4);
+    memcpy(dest + 82, buf + 188, 3);
+    dest[85] = 0;
 
     ESP_LOGI(TAG, "Quote: %s", dest);
 }
@@ -310,7 +321,7 @@ void app_main(void)
     xTaskCreate(&task_ssd1306_display_clear, "ssd1306_display_clear", 2048, NULL, 6, NULL);
     vTaskDelay(100/portTICK_PERIOD_MS);
     xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
-                (void *)"EUR/USD=1.2345", 6, NULL);
+                (void *)"Connecting\nto WiFi...", 6, NULL);
 /* end display init */
 
     ESP_ERROR_CHECK( nvs_flash_init() );
@@ -332,7 +343,7 @@ void app_main(void)
     esp_http_client_handle_t client = get_quote_client();
 
     // initialise buffers
-    const int bufsize = 512, stringsize = 64;
+    const int bufsize = 512, stringsize = 90;
     char *buf = malloc(bufsize),
         *string = malloc(stringsize);
 

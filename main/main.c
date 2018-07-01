@@ -347,6 +347,8 @@ void app_main(void)
         connectDelay *= 1.5;
     }
 
+    task_ssd_1306_display_clear(NULL);
+
     // get http client for quote fetching
     esp_http_client_handle_t client = get_quote_client();
 

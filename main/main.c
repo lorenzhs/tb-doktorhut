@@ -19,7 +19,7 @@
 #include "driver/gpio.h"
 #include "driver/i2c.h"
 
-#define SDA_PIN GPIO_NUM_15
+#define SDA_PIN GPIO_NUM_4
 #define SCL_PIN GPIO_NUM_2
 #define tag "SSD1306"
 

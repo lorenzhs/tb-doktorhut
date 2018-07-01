@@ -339,9 +339,13 @@ void app_main(void)
     ESP_LOGI(TAG, "Connected to AP");
 
     // Try to log into KA-WLAN
-    int status = wifi_login();
-    if (status != 0)
-        ESP_LOGE(TAG, "Couldn't log into KA-WLAN?");
+    int connectDelay = 1000;
+    while (wifi_login() != 0) {
+        ESP_LOGE(TAG, "Couldn't log into KA-WLAN?"
+                 "Waiting %d ms before trying to reconnect", connectDelay);
+        vTaskDelay(connectDelay / portTICK_PERIOD_MS);
+        connectDelay *= 1.5;
+    }
 
     // get http client for quote fetching
     esp_http_client_handle_t client = get_quote_client();

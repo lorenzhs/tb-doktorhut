@@ -20,7 +20,7 @@
 #include "driver/i2c.h"
 
 #define SDA_PIN GPIO_NUM_4
-#define SCL_PIN GPIO_NUM_2
+#define SCL_PIN GPIO_NUM_18
 #define tag "SSD1306"
 
 #include "font8x8_basic.h"

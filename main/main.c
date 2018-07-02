@@ -291,6 +291,8 @@ static void update_quote(esp_http_client_handle_t client) {
 
     ESP_LOGD(TAG, "Response: %s", buf);
 
+    memset(string, 0, STRINGSIZE);
+
     char* dest = string;
     sprintf(dest, "TB Forex Rates\n");
     dest += 15; // hack
@@ -326,6 +328,7 @@ static void quote_task(void* pvParam) {
     int dots = 0;
     EventBits_t bits;
     do {
+        memset(string, 0, STRINGSIZE);
         sprintf(string, "Connecting\nto WiFi");
         for (int i = 0; i < dots; ++i) {
             sprintf(string + strlen(string), ".");
@@ -355,6 +358,7 @@ static void quote_task(void* pvParam) {
         connectDelay *= 1.5;
     }
 
+    memset(string, 0, STRINGSIZE);
     xTaskCreate(&task_ssd1306_display_clear, "ssd1306_display_clear", 2048,
                 NULL, 6, NULL);
 

@@ -1,3 +1,12 @@
+/*
+ * TB-Doktorhut
+ *
+ * Possible todo items:
+ *
+ * - if exchange rate didn't change in the last ~10 fetches, double timeout (up
+ *   to 1 minute or so) to prevent weekend API hammering
+ */
+
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"

@@ -88,13 +88,15 @@ strand_t STRANDS[] = { // Avoid using any of the strapping pins on the ESP32
      .brightLimit = (int)(BR_NORM * 255), .numPixels = LED_LEN,
      .pixels = nullptr, ._stateVars = nullptr},
 };
-const strand_t *strand = &STRANDS[0];
+strand_t *strand = &STRANDS[0];
 
 int STRANDCNT = sizeof(STRANDS)/sizeof(STRANDS[0]);
 
 int arr[LED_LEN];
 float colours[LED_LEN];
 int flash1 = -1, flash2 = -1;
+
+TickType_t led_lastwake;
 
 /******************************************************************************/
 /*** WiFi Login (KA-WLAN)******************************************************/
@@ -429,7 +431,7 @@ void init_sort() {
     for (int i = 0; i < LED_LEN; i++) {
         arr[i] = rand();
         colours[i] = (float)arr[i] / (float)(RAND_MAX/6.0);
-        ESP_LOGI("sort", "arr[%d] = %d, hue: %f", i, arr[i], colours[i]);
+        ESP_LOGD("sort", "arr[%d] = %d, hue: %f", i, arr[i], colours[i]);
     }
 }
 
@@ -438,6 +440,7 @@ static void led_update() {
         strand->pixels[i] = hsv_to_rgb(colours[i], 1.0, BR_NORM);
     }
 
+    ESP_LOGD("sort", "led_update: flashing pixels %d and %d", flash1, flash2);
     if (flash1 > 0)
         strand->pixels[flash1] = hsv_to_rgb(colours[flash1], 1.0, BR_FLASH);
     if (flash2 > 0)
@@ -445,8 +448,11 @@ static void led_update() {
 
     digitalLeds_updatePixels(strand);
 
+    // voluntarily yield CPU to other tasks (for wifi stuff)
     taskYIELD();
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelayUntil(&led_lastwake, 100 / portTICK_PERIOD_MS);
+
+    led_lastwake = xTaskGetTickCount();
 }
 
 static void swap(int a, int b) {
@@ -462,7 +468,10 @@ static void swap(int a, int b) {
 
 static int partition (int low, int high)
 {
-    int pivot = arr[high];
+    int pi = rand() % (high - low) + low;
+    int pivot = arr[pi];
+    swap(pi, high);
+
     int i = (low - 1);  // Index of smaller element
 
     for (int j = low; j <= high- 1; j++) {
@@ -481,7 +490,7 @@ static int partition (int low, int high)
 static void quickSort(int level, int low, int high) {
     if (low < high) {
         int pi = partition(low, high);
-        ESP_LOGI("sort", "level %d, pivot: %d -> %d / %f",
+        ESP_LOGD("sort", "level %d, pivot: %d -> %d / %f",
                  level, pi, arr[pi], colours[pi]);
 
         quickSort(level + 1, low, pi - 1);
@@ -490,6 +499,7 @@ static void quickSort(int level, int low, int high) {
 }
 
 static void LED_task(void *pvParameters) {
+    led_lastwake = xTaskGetTickCount();
     while (1) {
         ESP_LOGI("sort", "initialising...");
         init_sort();
@@ -497,6 +507,9 @@ static void LED_task(void *pvParameters) {
 
         ESP_LOGI("sort", "starting quicksort");
         quickSort(0, 0, LED_LEN - 1);
+
+        flash1 = -1; flash2 = -1;
+        led_update();
 
         ESP_LOGI("sort", "done, short pause");
         vTaskDelay(2000 / portTICK_PERIOD_MS);

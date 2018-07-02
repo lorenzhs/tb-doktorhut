@@ -54,6 +54,8 @@ const int CONNECTED_BIT = BIT0;
 static const char *TAG = "tbhut";
 
 
+TickType_t quote_lastwake;
+
 /***************************************************/
 // LED stuff
 
@@ -85,6 +87,22 @@ float colours[LED_LEN];
 int flash1 = -1, flash2 = -1;
 
 TickType_t led_lastwake;
+
+
+static void safe_sleep(int ms, TickType_t *last_wake) {
+    const int loops = ms / 10;
+
+    for (int i = 0; i < loops; i++) {
+        vTaskDelayUntil(last_wake, 10 / portTICK_PERIOD_MS);
+        *last_wake = xTaskGetTickCount();
+    }
+
+    if (loops * 10 < ms) {
+        vTaskDelayUntil(last_wake, (ms - 10 * loops) / portTICK_PERIOD_MS);
+        *last_wake = xTaskGetTickCount();
+    }
+}
+
 
 /******************************************************************************/
 /*** WiFi Login (KA-WLAN)******************************************************/
@@ -353,12 +371,11 @@ static void quote_task(void* pvParam) {
         xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
                     string, 6, NULL);
 
+        quote_lastwake = xTaskGetTickCount();
+
         taskYIELD();
         /* delay */
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-        // vTaskDelayUntil(&quote_lastwake, 100 / portTICK_PERIOD_MS);
-
-        // quote_lastwake = xTaskGetTickCount();
+        safe_sleep(1000, &quote_lastwake);
     }
 
     vTaskDelete(NULL);
@@ -511,9 +528,7 @@ static void led_update() {
 
     // voluntarily yield CPU to other tasks (for wifi stuff)
     //taskYIELD();
-    vTaskDelayUntil(&led_lastwake, 100 / portTICK_PERIOD_MS);
-
-    led_lastwake = xTaskGetTickCount();
+    safe_sleep(100, &led_lastwake);
 }
 
 static void swap(int a, int b) {
@@ -575,7 +590,7 @@ static void LED_task(void *pvParameters) {
         led_update();
 
         ESP_LOGI("sort", "done, short pause");
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        safe_sleep(2000, &led_lastwake);
     }
 
     vTaskDelete(NULL);

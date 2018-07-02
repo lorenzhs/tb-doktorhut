@@ -489,9 +489,9 @@ static void led_update() {
     }
 
     ESP_LOGD("sort", "led_update: flashing pixels %d and %d", flash1, flash2);
-    if (flash1 > 0)
+    if (flash1 >= 0)
         strand->pixels[flash1] = hsv_to_rgb(colours[flash1], 1.0, BR_FLASH);
-    if (flash2 > 0)
+    if (flash2 >= 0)
         strand->pixels[flash2] = hsv_to_rgb(colours[flash2], 1.0, BR_FLASH);
 
     digitalLeds_updatePixels(strand);

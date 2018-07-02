@@ -372,6 +372,8 @@ static void quote_task(void* pvParam) {
 
         // quote_lastwake = xTaskGetTickCount();
     }
+
+    vTaskDelete(NULL);
 }
 
 
@@ -517,7 +519,7 @@ static void led_update() {
 
     // voluntarily yield CPU to other tasks (for wifi stuff)
     taskYIELD();
-    vTaskDelayUntil(&led_lastwake, 100 / portTICK_PERIOD_MS);
+    vTaskDelayUntil(&led_lastwake, 1000 / portTICK_PERIOD_MS);
 
     led_lastwake = xTaskGetTickCount();
 }
@@ -580,69 +582,9 @@ static void LED_task(void *pvParameters) {
         ESP_LOGI("sort", "done, short pause");
         vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
+
+    vTaskDelete(NULL);
 }
-
-
-
-void rainbow(strand_t * pStrand, unsigned long delay_ms, unsigned long timeout_ms)
-{
-  const uint8_t color_div = 4;
-  const uint8_t anim_step = 1;
-  const uint8_t anim_max = pStrand->brightLimit - anim_step;
-  pixelColor_t color1 = pixelFromRGB(anim_max, 0, 0);
-  pixelColor_t color2 = pixelFromRGB(anim_max, 0, 0);
-  uint8_t stepVal1 = 0;
-  uint8_t stepVal2 = 0;
-  bool runForever = (timeout_ms == 0 ? true : false);
-  unsigned long start_ms = millis();
-  while (runForever || (millis() - start_ms < timeout_ms)) {
-    color1 = color2;
-    stepVal1 = stepVal2;
-    for (uint16_t i = 0; i < pStrand->numPixels; i++) {
-      pStrand->pixels[i] = pixelFromRGB(color1.r/color_div, color1.g/color_div, color1.b/color_div);
-      if (i == 1) {
-        color2 = color1;
-        stepVal2 = stepVal1;
-      }
-      switch (stepVal1) {
-        case 0:
-        color1.g += anim_step;
-        if (color1.g >= anim_max)
-          stepVal1++;
-        break;
-        case 1:
-        color1.r -= anim_step;
-        if (color1.r == 0)
-          stepVal1++;
-        break;
-        case 2:
-        color1.b += anim_step;
-        if (color1.b >= anim_max)
-          stepVal1++;
-        break;
-        case 3:
-        color1.g -= anim_step;
-        if (color1.g == 0)
-          stepVal1++;
-        break;
-        case 4:
-        color1.r += anim_step;
-        if (color1.r >= anim_max)
-          stepVal1++;
-        break;
-        case 5:
-        color1.b -= anim_step;
-        if (color1.b == 0)
-          stepVal1 = 0;
-        break;
-      }
-    }
-    digitalLeds_updatePixels(pStrand);
-    vTaskDelay(delay_ms / portTICK_PERIOD_MS);
-  }
-  digitalLeds_resetPixels(pStrand);
-}
-
 
 /******************************************************************************/
 /*** Main Logic ***************************************************************/
@@ -661,16 +603,15 @@ void app_main(void)
 
     printf("%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
            (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
+    ESP_ERROR_CHECK( nvs_flash_init() );
 
-/* init display */
+    // Initialise display
     i2c_master_init();
     ssd1306_init();
 
     xTaskCreate(&task_ssd1306_display_clear, "ssd1306_display_clear", 2048, NULL, 6, NULL);
     vTaskDelay(100/portTICK_PERIOD_MS);
-/* end display init */
 
-    ESP_ERROR_CHECK( nvs_flash_init() );
 
     // Initialise LEDs
     LED_setup(LED_PIN, GPIO_MODE_OUTPUT, LOW);
@@ -682,7 +623,7 @@ void app_main(void)
     // schedule LED sorting task
     xTaskCreate(&LED_task, "LED_task", 2048, NULL, 4, NULL);
 
-    // Go for WiFi!
+    // Connect to wifi
     initialise_wifi();
 
     xTaskCreate(&quote_task, "quote_task", 2048, NULL, 6, NULL);

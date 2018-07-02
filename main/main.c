@@ -496,6 +496,8 @@ static void led_update() {
 
     digitalLeds_updatePixels(strand);
 
+    flash1 = -1; flash2 = -1;
+
     // voluntarily yield CPU to other tasks (for wifi stuff)
     taskYIELD();
     vTaskDelayUntil(&led_lastwake, 100 / portTICK_PERIOD_MS);
@@ -556,7 +558,6 @@ static void LED_task(void *pvParameters) {
         ESP_LOGI("sort", "starting quicksort");
         quickSort(0, 0, LED_LEN - 1);
 
-        flash1 = -1; flash2 = -1;
         led_update();
 
         ESP_LOGI("sort", "done, short pause");

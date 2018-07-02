@@ -311,11 +311,35 @@ static void update_quote(esp_http_client_handle_t client,
 }
 
 static void quote_task(void* pvParam) {
+    // initialise buffers
+    const int bufsize = 512, stringsize = 100;
+    char *buf = malloc(bufsize),
+        *string = malloc(stringsize);
 
     // Wait for the callback to set the CONNECTED_BIT in the event group.
     ESP_LOGI(TAG, "Waiting for WiFi connection...");
-    xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,
-                        false, true, portMAX_DELAY);
+
+    int dots = 0;
+    EventBits_t bits;
+    do {
+        sprintf(string, "Connecting\nto WiFi");
+        for (int i = 0; i < dots; ++i) {
+            sprintf(string + strlen(string), ".");
+        }
+        // clearing
+        for (int i = dots; i < 5; ++i) {
+            sprintf(string + strlen(string), " ");
+        }
+
+        xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
+                    string, 6, NULL);
+
+        dots = (dots + 1) % 5;
+
+        bits = xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT, false,
+                                   true, 1000 / portTICK_PERIOD_MS);
+
+    } while (!(bits & CONNECTED_BIT));
     ESP_LOGI(TAG, "Connected to AP");
 
     // Try to log into KA-WLAN
@@ -331,15 +355,8 @@ static void quote_task(void* pvParam) {
                 NULL, 6, NULL);
 
 
-
-
     // get http client for quote fetching
     esp_http_client_handle_t client = get_quote_client();
-
-    // initialise buffers
-    const int bufsize = 512, stringsize = 100;
-    char *buf = malloc(bufsize),
-        *string = malloc(stringsize);
 
     while (1) {
         ESP_LOGI(TAG, "fetching updated quote...");
@@ -651,8 +668,6 @@ void app_main(void)
 
     xTaskCreate(&task_ssd1306_display_clear, "ssd1306_display_clear", 2048, NULL, 6, NULL);
     vTaskDelay(100/portTICK_PERIOD_MS);
-    xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
-                (void *)"Connecting\nto WiFi...", 6, NULL);
 /* end display init */
 
     ESP_ERROR_CHECK( nvs_flash_init() );

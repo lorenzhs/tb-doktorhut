@@ -37,6 +37,11 @@
 #include "font8x8_basic.h"
 #include "ssd1366.h"
 
+// display string
+#define STRINGSIZE 100
+char string[STRINGSIZE];
+
+
 /*=================================================*/
 // wifi stuff
 
@@ -53,6 +58,11 @@ const int CONNECTED_BIT = BIT0;
 
 static const char *TAG = "tbhut";
 
+// wifi quote buffer
+#define BUFSIZE 5000
+char buf[BUFSIZE];
+
+char post_data[100];
 
 TickType_t quote_lastwake;
 
@@ -164,34 +174,30 @@ static int wifi_login()
              esp_http_client_get_content_length(client));
 
     // read data
-    const int bufsize = 5000;
-    char* data = malloc(bufsize);
     int read_index = 0, total_len = 0;
     while (1) {
-        int read_len = esp_http_client_read(client, data + read_index, bufsize - read_index);
+        int read_len = esp_http_client_read(client, buf + read_index, BUFSIZE - read_index);
         ESP_LOGI(TAG, "Read %d bytes", read_len);
         if (read_len <= 0) {
             break;
         }
         read_index += read_len;
         total_len += read_len;
-        data[read_index] = 0;
+        buf[read_index] = 0;
     }
     if (total_len <= 0) {
         ESP_LOGE(TAG, "Invalid length of the response");
-        free(data);
         goto _exit;
     }
 
-    ESP_LOGD(TAG, "Data=%s", data);
+    ESP_LOGD(TAG, "Data=%s", buf);
 
     // extract login information
     const char done_needle[] = "Sie sind erfolgreich eingeloggt.";
 
-    if (strstr(data, done_needle) != NULL) {
+    if (strstr(buf, done_needle) != NULL) {
         // we're already logged in
         ESP_LOGI(TAG, "already logged in, aborting");
-        free(data);
         status = 0;
         goto _exit;
     }
@@ -199,14 +205,14 @@ static int wifi_login()
     const char mac_needle[] = "<input type=\"hidden\" name=\"username\" type=\"text\" value=\"";
     const char pw_needle[] = "<input type=\"hidden\" name=\"password\" type=\"password\" value=\"";
 
-    char* mac_begin = strstr(data, mac_needle) + strlen(mac_needle);
+    char* mac_begin = strstr(buf, mac_needle) + strlen(mac_needle);
     char* mac_end = mac_begin + 17;
 
-    char* pw_begin = strstr(data, pw_needle) + strlen(pw_needle);
+    char* pw_begin = strstr(buf, pw_needle) + strlen(pw_needle);
     char* pw_end = strstr(pw_begin, "\"");
 
     ESP_LOGI(TAG, "Found MAC address at %d - %d, password at %d - %d",
-             mac_begin - data, mac_end - data, pw_begin - data, pw_end - data);
+             mac_begin - buf, mac_end - buf, pw_begin - buf, pw_end - buf);
 
     *mac_end = 0;
     *pw_end = 0;
@@ -219,11 +225,8 @@ static int wifi_login()
 
     ESP_LOGI(TAG, "MAC: %s, Pass: %s", mac, pw);
 
-    free(data);
-
     // assemble POST request
-    int post_data_len = 55 /* default params */ + 17 /* mac */ + strlen(pw);
-    char *post_data = malloc(post_data_len);
+    //int post_data_len = 55 /* default params */ + 17 /* mac */ + strlen(pw);
     sprintf(post_data,
             "dst=http://example.com&popup=false&username=%s&password=%s",
             mac, pw);
@@ -259,8 +262,7 @@ static esp_http_client_handle_t get_quote_client() {
     return client;
 }
 
-static void update_quote(esp_http_client_handle_t client,
-                         char* buf, int bufsize, char* dest, int destsize) {
+static void update_quote(esp_http_client_handle_t client) {
     /* Step 1: fetch new quote */
     esp_err_t err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
@@ -273,7 +275,7 @@ static void update_quote(esp_http_client_handle_t client,
     // read data
     int read_index = 0, total_len = 0;
     while (1) {
-        int read_len = esp_http_client_read(client, buf + read_index, bufsize - read_index);
+        int read_len = esp_http_client_read(client, buf + read_index, BUFSIZE - read_index);
         ESP_LOGI(TAG, "Read %d bytes", read_len);
         if (read_len <= 0) {
             break;
@@ -289,6 +291,7 @@ static void update_quote(esp_http_client_handle_t client,
 
     ESP_LOGD(TAG, "Response: %s", buf);
 
+    char* dest = string;
     sprintf(dest, "TB Forex Rates\n");
     dest += 15; // hack
 
@@ -317,11 +320,6 @@ static void update_quote(esp_http_client_handle_t client,
 }
 
 static void quote_task(void* pvParam) {
-    // initialise buffers
-    const int bufsize = 512, stringsize = 100;
-    char *buf = malloc(bufsize),
-        *string = malloc(stringsize);
-
     // Wait for the callback to set the CONNECTED_BIT in the event group.
     ESP_LOGI(TAG, "Waiting for WiFi connection...");
 
@@ -366,7 +364,8 @@ static void quote_task(void* pvParam) {
 
     while (1) {
         ESP_LOGI(TAG, "fetching updated quote...");
-        update_quote(client, buf, bufsize, string, stringsize);
+        update_quote(client);
+
         /* update text */
         xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
                     string, 6, NULL);

@@ -496,10 +496,14 @@ static void led_update() {
     }
 
     ESP_LOGD("sort", "led_update: flashing pixels %d and %d", flash1, flash2);
+    if (flash1 >= LED_LEN || flash2 >= LED_LEN) {
+        ESP_LOGE("sort", "out of bounds flash index: %d %d", flash1, flash2);
+    }
     if (flash1 >= 0)
         strand->pixels[flash1] = hsv_to_rgb(colours[flash1], 1.0, BR_FLASH);
     if (flash2 >= 0)
         strand->pixels[flash2] = hsv_to_rgb(colours[flash2], 1.0, BR_FLASH);
+
 
     digitalLeds_updatePixels(strand);
 
@@ -513,6 +517,9 @@ static void led_update() {
 }
 
 static void swap(int a, int b) {
+    if (a >= LED_LEN || b >= LED_LEN)
+        ESP_LOGE("sort", "out of bounds swap: %d %d", a, b);
+
     float temp_colour = colours[a];
     int temp_val = arr[a];
     colours[a] = colours[b]; arr[a] = arr[b];

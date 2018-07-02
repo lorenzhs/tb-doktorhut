@@ -188,7 +188,7 @@ void task_ssd1306_scroll(void *ignore) {
     vTaskDelete(NULL);
 }
 
-void task_ssd1306_display_text(const void *arg_text) {
+void task_ssd1306_display_text(void *arg_text) {
     char *text = (char*)arg_text;
     uint8_t text_len = strlen(text);
 

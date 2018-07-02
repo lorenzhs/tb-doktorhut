@@ -8,6 +8,8 @@
  */
 
 #include <string.h>
+#include <time.h>
+#include <stdlib.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -58,6 +60,7 @@ static const char *TAG = "tbhut";
 #include "esp32_digital_led_lib.h"
 
 #define LED_PIN GPIO_NUM_14
+#define LED_LEN 41
 
 #ifndef __cplusplus
 #define nullptr  NULL
@@ -77,16 +80,21 @@ static const char *TAG = "tbhut";
 #define floor(a)   ((int)(a))
 #define ceil(a)    ((int)((int)(a) < (a) ? (a+1) : (a)))
 
+#define BR_NORM 0.1
+#define BR_FLASH 0.4
 
 strand_t STRANDS[] = { // Avoid using any of the strapping pins on the ESP32
     {.rmtChannel = 1, .gpioNum = LED_PIN, .ledType = LED_SK6812W_V1,
-     .brightLimit = 32, .numPixels =  41, .pixels = nullptr,
-     ._stateVars = nullptr},
+     .brightLimit = (int)(BR_NORM * 255), .numPixels = LED_LEN,
+     .pixels = nullptr, ._stateVars = nullptr},
 };
+const strand_t *strand = &STRANDS[0];
 
 int STRANDCNT = sizeof(STRANDS)/sizeof(STRANDS[0]);
 
-
+int arr[LED_LEN];
+float colours[LED_LEN];
+int flash1 = -1, flash2 = -1;
 
 /******************************************************************************/
 /*** WiFi Login (KA-WLAN)******************************************************/
@@ -361,7 +369,7 @@ uint32_t IRAM_ATTR millis()
   return xTaskGetTickCount() * portTICK_PERIOD_MS;
 }
 
-pixelColor_t HSV_to_RGB( float h, float s, float v ) {
+pixelColor_t hsv_to_rgb(float h, float s, float v) {
     /* h in in range [0,6], s and v in [0,1]
        result is in form #rrggbb */
     int i;
@@ -369,13 +377,14 @@ pixelColor_t HSV_to_RGB( float h, float s, float v ) {
 
     // Saturation or value of out range => return black
     if ((s<0.0) || (s>1.0) || (v<0.0) || (v>1.0)) {
-        return 0L;
+        return pixelFromRGB(0,0,0);
     }
 
     if ((h < 0.0) || (h > 6.0)) {
         // Hue out of range => return grey according to value
         v *= 255;
-        return long(v) | long(v) << 8 | long(v) << 16;
+        return pixelFromRGB(v, v, v);
+        //return long(v) | long(v) << 8 | long(v) << 16;
     }
 
     i = floor(h);
@@ -410,6 +419,87 @@ pixelColor_t HSV_to_RGB( float h, float s, float v ) {
     case 5: // (v, m, n)
         return pixelFromRGB(m, n, v);
         //return long(v ) << 16 | long(m) << 8 | long(n);
+    }
+    ESP_LOGE(TAG, "hsv_to_rgb error: default case reached!");
+    return pixelFromRGB(0, 0, 0);
+}
+
+
+void init_sort() {
+    for (int i = 0; i < LED_LEN; i++) {
+        arr[i] = rand();
+        colours[i] = (float)arr[i] / (float)(RAND_MAX/6.0);
+        ESP_LOGI("sort", "arr[%d] = %d, hue: %f", i, arr[i], colours[i]);
+    }
+}
+
+static void led_update() {
+    for (int i = 0; i < LED_LEN; i++) {
+        strand->pixels[i] = hsv_to_rgb(colours[i], 1.0, BR_NORM);
+    }
+
+    if (flash1 > 0)
+        strand->pixels[flash1] = hsv_to_rgb(colours[flash1], 1.0, BR_FLASH);
+    if (flash2 > 0)
+        strand->pixels[flash2] = hsv_to_rgb(colours[flash2], 1.0, BR_FLASH);
+
+    digitalLeds_updatePixels(strand);
+
+    taskYIELD();
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+}
+
+static void swap(int a, int b) {
+    float temp_colour = colours[a];
+    int temp_val = arr[a];
+    colours[a] = colours[b]; arr[a] = arr[b];
+    colours[b] = temp_colour; arr[b] = temp_val;
+
+    flash1 = a; flash2 = b;
+
+    led_update();
+}
+
+static int partition (int low, int high)
+{
+    int pivot = arr[high];
+    int i = (low - 1);  // Index of smaller element
+
+    for (int j = low; j <= high- 1; j++) {
+        if (arr[j] <= pivot)
+        {
+            i++;
+            swap(i, j);
+        }
+    }
+    swap(i + 1, high);
+    return (i + 1);
+}
+
+/* low  --> Starting index,
+   high  --> Ending index */
+static void quickSort(int level, int low, int high) {
+    if (low < high) {
+        int pi = partition(low, high);
+        ESP_LOGI("sort", "level %d, pivot: %d -> %d / %f",
+                 level, pi, arr[pi], colours[pi]);
+
+        quickSort(level + 1, low, pi - 1);
+        quickSort(level + 1, pi + 1, high);
+    }
+}
+
+static void LED_task(void *pvParameters) {
+    while (1) {
+        ESP_LOGI("sort", "initialising...");
+        init_sort();
+        led_update();
+
+        ESP_LOGI("sort", "starting quicksort");
+        quickSort(0, 0, LED_LEN - 1);
+
+        ESP_LOGI("sort", "done, short pause");
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
 }
 
@@ -510,15 +600,18 @@ void app_main(void)
     if (digitalLeds_initStrands(STRANDS, STRANDCNT)) {
         ESP_LOGE(TAG, "LED init failure :(");
     }
+    srand(time(NULL));
 
+    xTaskCreate(&LED_task, "LED_task", 2048, NULL, 6, NULL);
+/*
     // TEMP
     while (true) {
         for (int i = 0; i < STRANDCNT; i++) {
             strand_t * pStrand = &STRANDS[i];
-            rainbow(pStrand, 10, 2000);
+            rainbow(pStrand, 10, 20000);
             digitalLeds_resetPixels(pStrand);
         }
-    }
+        }*/
 
     // Go for WiFi!
     initialise_wifi();

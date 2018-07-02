@@ -66,22 +66,10 @@ static const char *TAG = "tbhut";
 #define nullptr  NULL
 #endif
 
-#define HIGH 1
-#define LOW 0
-/*
-#define DEC 10
-#define HEX 16
-#define OCT 8
-#define BIN 2
-*/
-
-#define min(a, b)  ((a) < (b) ? (a) : (b))
-#define max(a, b)  ((a) > (b) ? (a) : (b))
 #define floor(a)   ((int)(a))
-#define ceil(a)    ((int)((int)(a) < (a) ? (a+1) : (a)))
 
 #define BR_NORM 0.1
-#define BR_FLASH 0.4
+#define BR_FLASH 0.5
 
 strand_t STRANDS[] = { // Avoid using any of the strapping pins on the ESP32
     {.rmtChannel = 1, .gpioNum = LED_PIN, .ledType = LED_SK6812W_V1,
@@ -614,7 +602,7 @@ void app_main(void)
 
 
     // Initialise LEDs
-    LED_setup(LED_PIN, GPIO_MODE_OUTPUT, LOW);
+    LED_setup(LED_PIN, GPIO_MODE_OUTPUT, 0);
     if (digitalLeds_initStrands(STRANDS, STRANDCNT)) {
         ESP_LOGE(TAG, "LED init failure :(");
     }

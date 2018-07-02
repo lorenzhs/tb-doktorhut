@@ -310,6 +310,54 @@ static void update_quote(esp_http_client_handle_t client,
     ESP_LOGI(TAG, "Quote: %s", dest);
 }
 
+static void quote_task(void* pvParam) {
+
+    // Wait for the callback to set the CONNECTED_BIT in the event group.
+    ESP_LOGI(TAG, "Waiting for WiFi connection...");
+    xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,
+                        false, true, portMAX_DELAY);
+    ESP_LOGI(TAG, "Connected to AP");
+
+    // Try to log into KA-WLAN
+    int connectDelay = 1000;
+    while (wifi_login() != 0) {
+        ESP_LOGE(TAG, "Couldn't log into KA-WLAN?"
+                 "Waiting %d ms before trying to reconnect", connectDelay);
+        vTaskDelay(connectDelay / portTICK_PERIOD_MS);
+        connectDelay *= 1.5;
+    }
+
+    xTaskCreate(&task_ssd1306_display_clear, "ssd1306_display_clear", 2048,
+                NULL, 6, NULL);
+
+
+
+
+    // get http client for quote fetching
+    esp_http_client_handle_t client = get_quote_client();
+
+    // initialise buffers
+    const int bufsize = 512, stringsize = 100;
+    char *buf = malloc(bufsize),
+        *string = malloc(stringsize);
+
+    while (1) {
+        ESP_LOGI(TAG, "fetching updated quote...");
+        update_quote(client, buf, bufsize, string, stringsize);
+        /* update text */
+        xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
+                    string, 6, NULL);
+
+        taskYIELD();
+        /* delay */
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        // vTaskDelayUntil(&quote_lastwake, 100 / portTICK_PERIOD_MS);
+
+        // quote_lastwake = xTaskGetTickCount();
+    }
+}
+
+
 /******************************************************************************/
 /*** WiFi Authentication ******************************************************/
 
@@ -615,37 +663,14 @@ void app_main(void)
     }
     srand(time(NULL));
 
+    // schedule LED sorting task
     xTaskCreate(&LED_task, "LED_task", 2048, NULL, 6, NULL);
-/*
-    // TEMP
-    while (true) {
-        for (int i = 0; i < STRANDCNT; i++) {
-            strand_t * pStrand = &STRANDS[i];
-            rainbow(pStrand, 10, 20000);
-            digitalLeds_resetPixels(pStrand);
-        }
-        }*/
 
     // Go for WiFi!
     initialise_wifi();
 
-    // Wait for the callback to set the CONNECTED_BIT in the event group.
-    xEventGroupWaitBits(wifi_event_group, CONNECTED_BIT,
-                        false, true, portMAX_DELAY);
-    ESP_LOGI(TAG, "Connected to AP");
-
-    // Try to log into KA-WLAN
-    int connectDelay = 1000;
-    while (wifi_login() != 0) {
-        ESP_LOGE(TAG, "Couldn't log into KA-WLAN?"
-                 "Waiting %d ms before trying to reconnect", connectDelay);
-        vTaskDelay(connectDelay / portTICK_PERIOD_MS);
-        connectDelay *= 1.5;
-    }
-
-    xTaskCreate(&task_ssd1306_display_clear, "ssd1306_display_clear", 2048,
-                NULL, 6, NULL);
-
+    xTaskCreate(&quote_task, "quote_task", 2048, NULL, 6, NULL);
+    /*
     // get http client for quote fetching
     esp_http_client_handle_t client = get_quote_client();
 
@@ -657,12 +682,11 @@ void app_main(void)
     while (1) {
         ESP_LOGI(TAG, "fetching updated quote...");
         update_quote(client, buf, bufsize, string, stringsize);
-        /* update text */
+        // update text
         xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
                     string, 6, NULL);
-        /* delay */
         vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
+    }*/
 
     /* xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL); */
 }

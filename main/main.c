@@ -680,29 +680,10 @@ void app_main(void)
     srand(esp_random());
 
     // schedule LED sorting task
-    xTaskCreate(&LED_task, "LED_task", 2048, NULL, 6, NULL);
+    xTaskCreate(&LED_task, "LED_task", 2048, NULL, 4, NULL);
 
     // Go for WiFi!
     initialise_wifi();
 
     xTaskCreate(&quote_task, "quote_task", 2048, NULL, 6, NULL);
-    /*
-    // get http client for quote fetching
-    esp_http_client_handle_t client = get_quote_client();
-
-    // initialise buffers
-    const int bufsize = 512, stringsize = 100;
-    char *buf = malloc(bufsize),
-        *string = malloc(stringsize);
-
-    while (1) {
-        ESP_LOGI(TAG, "fetching updated quote...");
-        update_quote(client, buf, bufsize, string, stringsize);
-        // update text
-        xTaskCreate(&task_ssd1306_display_text, "ssd1306_display_text", 2048,
-                    string, 6, NULL);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }*/
-
-    /* xTaskCreate(&http_get_task, "http_get_task", 4096, NULL, 5, NULL); */
 }

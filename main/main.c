@@ -662,7 +662,7 @@ void app_main(void)
     if (digitalLeds_initStrands(STRANDS, STRANDCNT)) {
         ESP_LOGE(TAG, "LED init failure :(");
     }
-    srand(time(NULL));
+    srand(esp_random());
 
     // schedule LED sorting task
     xTaskCreate(&LED_task, "LED_task", 2048, NULL, 6, NULL);

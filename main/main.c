@@ -506,8 +506,8 @@ static void led_update() {
     flash1 = -1; flash2 = -1;
 
     // voluntarily yield CPU to other tasks (for wifi stuff)
-    taskYIELD();
-    vTaskDelayUntil(&led_lastwake, 1000 / portTICK_PERIOD_MS);
+    //taskYIELD();
+    vTaskDelayUntil(&led_lastwake, 100 / portTICK_PERIOD_MS);
 
     led_lastwake = xTaskGetTickCount();
 }

@@ -38,7 +38,7 @@
 #include "ssd1366.h"
 
 // display string
-#define STRINGSIZE 100
+#define STRINGSIZE 120
 char string[STRINGSIZE];
 
 
@@ -62,7 +62,7 @@ static const char *TAG = "tbhut";
 #define BUFSIZE 5000
 char buf[BUFSIZE];
 
-char post_data[100];
+char post_data[120];
 
 TickType_t quote_lastwake;
 
@@ -255,7 +255,7 @@ _exit:
 
 static esp_http_client_handle_t get_quote_client() {
     esp_http_client_config_t config = {
-        .url = "http://webrates.truefx.com/rates/connect.html",
+        .url = "https://webrates.truefx.com/rates/connect.html",
         .event_handler = _http_event_handler,
     };
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -639,5 +639,5 @@ void app_main(void)
     // Connect to wifi
     initialise_wifi();
 
-    xTaskCreate(&quote_task, "quote_task", 2048, NULL, 6, NULL);
+    xTaskCreate(&quote_task, "quote_task", 8 * 2048, NULL, 6, NULL);
 }
